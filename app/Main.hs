@@ -1,8 +1,9 @@
 module Main where
 
-import qualified MyLib (someFunc)
+import Control.Monad (forever)
 
 main :: IO ()
-main = do
-  putStrLn "Hello, Haskell!"
-  MyLib.someFunc
+main = forever $ do
+    input <- getLine
+    putStrLn input
+    -- print.eval.parse.tokenize input
