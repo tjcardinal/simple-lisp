@@ -20,7 +20,7 @@ maintainer:         tylerjcardinal@gmail.com
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  MyLib
+    exposed-modules:  Repl
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -50,5 +50,9 @@ test-suite lisp-hs-test
     default-language: Haskell2010
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
-    main-is:          MyLibTest.hs
-    build-depends:    base ^>=4.16.1.0
+    main-is:          ReplTest.hs
+    build-depends:
+        base ^>=4.16.1.0,
+        lisp-hs,
+        tasty,
+        tasty-hunit

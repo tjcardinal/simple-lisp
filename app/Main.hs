@@ -4,6 +4,7 @@ import Control.Monad (forever)
 
 main :: IO ()
 main = forever $ do
-    input <- getLine
-    putStrLn input
-    -- print.eval.parse.tokenize input
+  input <- getLine
+  putStrLn input
+
+-- print.eval.parse.tokenize input
