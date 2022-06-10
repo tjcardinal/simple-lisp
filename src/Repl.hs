@@ -118,9 +118,9 @@ comparisonOperator op env exprs = do
     oper (_, env1) (_, env2) = (False, Map.union env1 env2)
 
 ifOperator :: Env -> [Expr] -> ExprResult
-ifOperator env (x:y:z:[]) = do
+ifOperator env (x : y : z : []) = do
   (evalX, envX) <- eval env x
-  (evalY, envY)<- eval env y
+  (evalY, envY) <- eval env y
   (evalZ, envZ) <- eval env z
   case evalX of
     Boolean b -> case b of
@@ -130,7 +130,7 @@ ifOperator env (x:y:z:[]) = do
 ifOperator _ _ = Left InvalidForm
 
 defOperator :: Env -> [Expr] -> ExprResult
-defOperator env (x:y:[]) = do
+defOperator env (x : y : []) = do
   case x of
     Symbol s -> Right (y, Map.insert s y env)
     _ -> Left InvalidForm
