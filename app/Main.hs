@@ -1,13 +1,19 @@
 module Main where
 
-import Control.Monad (forever)
 import Repl
 
 main :: IO ()
-main = forever $ do
-  -- env needs to exists outside the loop. Use something else than forever monad?
-  input <- getLine
+main = do
   let env = defaultEnv
+  replLoop env
+
+replLoop :: Repl.Env -> IO ()
+replLoop env = do
+  input <- getLine
   case parseAndEval env input of
-    (Right output, _) -> print output
-    (Left output, _) -> print output
+    Right (output, newEnv) -> do
+      print output
+      replLoop newEnv
+    Left output -> do
+      print output
+      replLoop env

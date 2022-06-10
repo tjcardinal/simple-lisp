@@ -1,4 +1,4 @@
-module Repl (defaultEnv, parseAndEval) where
+module Repl (Env, defaultEnv, parseAndEval) where
 
 import Control.Monad (foldM)
 import Data.Map qualified as Map
@@ -17,7 +17,7 @@ data Expr
   = Boolean Bool
   | Number Float
   | Symbol String
-  | Function String (Env -> [Expr] -> Either ExprError Expr)
+  | Function String (Env -> [Expr] -> ExprResult)
   | List [Expr]
 
 instance Show Expr where
@@ -35,6 +35,8 @@ data ExprError
   deriving (Show)
 
 type Env = Map.Map String Expr
+
+type ExprResult = Either ExprError (Expr, Env)
 
 data ReplError
   = ParseError ParseError
@@ -92,53 +94,63 @@ defaultEnv =
       (">=", Function ">=" $ comparisonOperator (>=)),
       ("<=", Function "<=" $ comparisonOperator (<=)),
       ("=", Function "=" $ comparisonOperator (==)),
-      ("if", Function "if" $ ifOperator)
+      ("if", Function "if" $ ifOperator),
+      ("def", Function "def" $ defOperator)
     ]
 
-arithmeticOperator :: (Float -> Float -> Float) -> Expr -> Env -> [Expr] -> Either ExprError Expr
+arithmeticOperator :: (Float -> Float -> Float) -> Expr -> Env -> [Expr] -> ExprResult
 arithmeticOperator operation baseCase env exprs = do
   evalExprs <- mapM (eval env) exprs
-  foldM oper baseCase evalExprs
+  foldM oper (baseCase, env) evalExprs
   where
-    oper (Number x) (Number y) = Right $ Number $ operation x y
+    oper (Number x, env1) (Number y, env2) = Right $ (Number $ operation x y, Map.union env1 env2)
     oper _ _ = Left NotANumber
 
-comparisonOperator :: (Float -> Float -> Bool) -> Env -> [Expr] -> Either ExprError Expr
+comparisonOperator :: (Float -> Float -> Bool) -> Env -> [Expr] -> ExprResult
 comparisonOperator op env exprs = do
   evalExprs <- mapM (eval env) exprs
   let comparisons = zipWith oper evalExprs (drop 1 evalExprs)
-  case all (== True) comparisons of
-    True -> Right $ Boolean True
-    False -> Right $ Boolean False
+  case all (== True) (map fst comparisons) of
+    True -> Right $ (Boolean True, env)
+    False -> Right $ (Boolean False, env)
   where
-    oper (Number y) (Number z) = op y z
-    oper _ _ = False
+    oper (Number x, env1) (Number y, env2) = (op y x, Map.union env1 env2)
+    oper (_, env1) (_, env2) = (False, Map.union env1 env2)
 
-ifOperator :: Env -> [Expr] -> Either ExprError Expr
+ifOperator :: Env -> [Expr] -> ExprResult
 ifOperator env (x:y:z:[]) = do
-  evalX <- eval env x
+  (evalX, envX) <- eval env x
+  (evalY, envY)<- eval env y
+  (evalZ, envZ) <- eval env z
   case evalX of
     Boolean b -> case b of
-      True -> Right y
-      False -> Right z
+      True -> Right (evalY, Map.union envX envY)
+      False -> Right (evalZ, Map.union envX envZ)
     _ -> Left InvalidForm
 ifOperator _ _ = Left InvalidForm
 
+defOperator :: Env -> [Expr] -> ExprResult
+defOperator env (x:y:[]) = do
+  case x of
+    Symbol s -> Right (y, Map.insert s y env)
+    _ -> Left InvalidForm
+defOperator _ _ = Left InvalidForm
+
 -- Evaluates an expression
-eval :: Env -> Expr -> Either ExprError Expr
-eval _ (Boolean x) = Right $ Boolean x
-eval _ (Number x) = Right $ Number x
+eval :: Env -> Expr -> ExprResult
+eval env (Boolean x) = Right $ (Boolean x, env)
+eval env (Number x) = Right $ (Number x, env)
 eval env (Symbol x)
-  | Map.member x env = Right $ env Map.! x
+  | Map.member x env = Right $ (env Map.! x, env)
   | otherwise = Left UnknownSymbol
 eval _ (Function _ _) = Left UnexpectedFunction
-eval _ (List []) = Right $ List []
+eval env (List []) = Right $ (List [], env)
 eval env (List (x : xs)) = case eval env x of
-  Right (Function _ f) -> f env xs
+  Right (Function _ f, newEnv) -> f newEnv xs
   Left exprError -> Left exprError
   _ -> Left InvalidForm
 
-parseAndEval :: Env -> String -> Either ReplError Expr
+parseAndEval :: Env -> String -> Either ReplError (Expr, Env)
 parseAndEval env input =
   case parse . tokenize $ input of
     Right (expr, []) -> case eval env expr of
