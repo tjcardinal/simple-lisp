@@ -19,6 +19,7 @@ data Expr
   | Symbol String
   | Function String (Env -> [Expr] -> ExprResult)
   | List [Expr]
+  | Lambda Expr Expr
 
 instance Show Expr where
   show (Boolean x) = show x
@@ -26,6 +27,7 @@ instance Show Expr where
   show (Symbol x) = x
   show (Function x _) = "Function " ++ x
   show (List x) = "(" ++ unwords (map show x) ++ ")"
+  show (Lambda x y) = show x ++ " " ++ show y
 
 data ExprError
   = NotANumber
@@ -95,7 +97,8 @@ defaultEnv =
       ("<=", Function "<=" $ comparisonOperator (<=)),
       ("=", Function "=" $ comparisonOperator (==)),
       ("if", Function "if" $ ifOperator),
-      ("def", Function "def" $ defOperator)
+      ("def", Function "def" $ defOperator),
+      ("lambda", Function "lambda" $ lambdaOperator)
     ]
 
 arithmeticOperator :: (Float -> Float -> Float) -> Expr -> Env -> [Expr] -> ExprResult
@@ -130,11 +133,14 @@ ifOperator env (x : y : z : []) = do
 ifOperator _ _ = Left InvalidForm
 
 defOperator :: Env -> [Expr] -> ExprResult
-defOperator env (x : y : []) = do
-  case x of
-    Symbol s -> Right (y, Map.insert s y env)
-    _ -> Left InvalidForm
+defOperator env (Symbol s : x : []) = do
+  (evalX, newEnv) <- eval env x
+  Right (evalX, Map.insert s evalX newEnv)
 defOperator _ _ = Left InvalidForm
+
+lambdaOperator :: Env -> [Expr] -> ExprResult
+lambdaOperator env (x : y : []) = Right (Lambda x y, env)
+lambdaOperator _ _ = Left InvalidForm
 
 -- Evaluates an expression
 eval :: Env -> Expr -> ExprResult
@@ -147,8 +153,18 @@ eval _ (Function _ _) = Left UnexpectedFunction
 eval env (List []) = Right $ (List [], env)
 eval env (List (x : xs)) = case eval env x of
   Right (Function _ f, newEnv) -> f newEnv xs
+  Right (Lambda (List parms) f, newEnv) -> do
+    case length parms == length xs of
+      True -> do
+        let nameValPairs = zipWith (\name val -> [name, val]) parms xs
+        defs <- mapM (defOperator newEnv) nameValPairs
+        let lambdaEnv = Map.unions (map snd defs)
+        evalLambda <- eval lambdaEnv f
+        return (fst evalLambda, newEnv)
+      False -> Left $ InvalidForm
   Left exprError -> Left exprError
   _ -> Left InvalidForm
+eval _ (Lambda _ _) = Left UnexpectedFunction
 
 parseAndEval :: Env -> String -> Either ReplError (Expr, Env)
 parseAndEval env input =
