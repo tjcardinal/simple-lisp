@@ -60,6 +60,7 @@ test-suite lisp-hs-test
     main-is:          ReplTest.hs
     build-depends:
         base ^>=4.16.1.0,
+        containers,
         lisp-hs,
         tasty,
         tasty-hunit
