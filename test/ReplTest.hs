@@ -28,7 +28,12 @@ parseTests :: TestTree
 parseTests =
   testGroup
     "Parse Tests"
-    [ checkEqual "" $ Left $ ParseError EmptyTokenList
+    [ checkEqual "" $ Left $ ParseError EmptyTokenList,
+      checkEqual "()" $ Right (List [], defaultEnv),
+      checkEqual ")" $ Left $ ParseError InvalidRightParens,
+      checkEqual "(+ 2 3" $ Left $ ParseError MissingRightParens,
+      checkEqual "(+ 2 3) 4" $ Left $ ParseError TokensRemaining,
+      checkEqual "(+ 2 (- 3 (* 4 (/ 5 6))))" $ Right (Number $ 1 + 2/3, defaultEnv)
     ]
 
 additionTests :: TestTree
@@ -212,17 +217,26 @@ defTests :: TestTree
 defTests =
   testGroup
     "Def Tests"
-    [
-      let Right (_, env) = parseAndEval defaultEnv "(def a 2)"
-       in checkDef env "a" $ Right (Number $ 2, env),
-      let Right (_, env) = parseAndEval defaultEnv "(def a true)"
-       in checkDef env "a" $ Right (Boolean $ True, env),
-      let Right (_, env) = parseAndEval defaultEnv "(def a (+ 2 3))"
-       in checkDef env "a" $ Right (Number $ 5, env),
-      let Right (_, env) = parseAndEval defaultEnv "(def a +)"
-       in checkDef env "(a 2 3)" $ Right (Number $ 5, env),
-      let Right (_, env) = parseAndEval defaultEnv "(def a (lambda (a b) (+ a b)))"
-       in checkDef env "(a 2 3)" $ Right (Number $ 5, env)
+    [ ( case parseAndEval defaultEnv "(def a 2)" of
+          Right (_, env) -> checkDef env "a" $ Right (Number $ 2, env)
+          _ -> testCase "" $ assertFailure "def failed"
+      ),
+      ( case parseAndEval defaultEnv "(def a true)" of
+          Right (_, env) -> checkDef env "a" $ Right (Boolean $ True, env)
+          _ -> testCase "" $ assertFailure "def failed"
+      ),
+      ( case parseAndEval defaultEnv "(def a (+ 2 3))" of
+          Right (_, env) -> checkDef env "a" $ Right (Number $ 5, env)
+          _ -> testCase "" $ assertFailure "def failed"
+      ),
+      ( case parseAndEval defaultEnv "(def a +)" of
+          Right (_, env) -> checkDef env "(a 2 3)" $ Right (Number $ 5, env)
+          _ -> testCase "" $ assertFailure "def failed"
+      ),
+      ( case parseAndEval defaultEnv "(def a (lambda (a b) (+ a b)))" of
+          Right (_, env) -> checkDef env "(a 2 3)" $ Right (Number $ 5, env)
+          _ -> testCase "" $ assertFailure "def failed"
+      )
     ]
 
 lambdaTests :: TestTree
