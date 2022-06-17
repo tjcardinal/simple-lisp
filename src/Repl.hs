@@ -1,4 +1,4 @@
-module Repl (ParseError(..), Expr(..), ExprError(..), ReplError(..), Env, defaultEnv, parseAndEval) where
+module Repl (ParseError (..), Expr (..), ExprError (..), ReplError (..), Env, defaultEnv, parseAndEval) where
 
 import Control.Monad (foldM, zipWithM)
 import Data.Map qualified as Map
@@ -36,7 +36,7 @@ instance Eq Expr where
   (==) (Function x _) (Function y _) = x == y
   (==) (List x) (List y) = x == y
   (==) (Lambda x1 x2) (Lambda y1 y2) = x1 == y1 && x2 == y2
-  (==) _ _= False
+  (==) _ _ = False
 
 data ExprError
   = NotANumber
@@ -45,6 +45,7 @@ data ExprError
   | InvalidForm
   deriving (Show, Eq)
 
+-- A symbol -> expression lookup table. Calling def adds to this table
 type Env = Map.Map String Expr
 
 type ExprResult = Either ExprError (Expr, Env)
@@ -93,12 +94,13 @@ parseAtom x = case readMaybe x of
   Just n -> Number n
   Nothing -> Symbol x
 
+-- A standard environment
 defaultEnv :: Env
 defaultEnv =
   Map.fromList
-    [ ("+", Function "+" $ genericArithmeticOperator (+) $ Number 0),
+    [ ("+", Function "+" $ standardAritmeticOperator (+) $ Number 0),
       ("-", Function "-" $ subtractionOperator),
-      ("*", Function "*" $ genericArithmeticOperator (*) $ Number 1),
+      ("*", Function "*" $ standardAritmeticOperator (*) $ Number 1),
       ("/", Function "/" $ divisionOperator),
       (">", Function ">" $ comparisonOperator (>)),
       ("<", Function "<" $ comparisonOperator (<)),
@@ -110,27 +112,35 @@ defaultEnv =
       ("lambda", Function "lambda" $ lambdaOperator)
     ]
 
-genericArithmeticOperator :: (Float -> Float -> Float) -> Expr -> Env -> [Expr] -> ExprResult
-genericArithmeticOperator operation startValue env exprs = do
+-- Folds over [startValue : exprs] using operator
+standardAritmeticOperator :: (Float -> Float -> Float) -> Expr -> Env -> [Expr] -> ExprResult
+standardAritmeticOperator operator startValue env exprs = do
   evalStartValue <- eval env startValue
   evalExprs <- mapM (eval env) exprs
   foldM oper evalStartValue evalExprs
   where
-    oper (Number x, env1) (Number y, env2) = Right $ (Number $ operation x y, Map.union env1 env2)
+    oper (Number x, env1) (Number y, env2) = Right $ (Number $ operator x y, Map.union env1 env2)
     oper _ _ = Left NotANumber
 
+-- Subtraction has a few unique cases over the standard:
+--  (- x) => 0 - x    x is subtracted from starting value
+--  (- x y) => x - y  x is used AS starting value
 subtractionOperator :: Env -> [Expr] -> ExprResult
 subtractionOperator env [] = Right (Number 0, env)
-subtractionOperator env (expr:[]) = genericArithmeticOperator (-) (Number 0) env [expr]
-subtractionOperator env (expr:exprs) = genericArithmeticOperator (-) expr env exprs
+subtractionOperator env (expr : []) = standardAritmeticOperator (-) (Number 0) env [expr]
+subtractionOperator env (expr : exprs) = standardAritmeticOperator (-) expr env exprs
 
+-- Division has a few unique cases over the standard:
+--  (/ x) => 1 / x    x is divisor for starting value
+--  (/ x y) => x / y  x is used AS starting value
 divisionOperator :: Env -> [Expr] -> ExprResult
 divisionOperator env [] = Right (Number 1, env)
-divisionOperator env (expr:[]) = genericArithmeticOperator (/) (Number 1) env [expr]
-divisionOperator env (expr:exprs) = genericArithmeticOperator (/) expr env exprs
+divisionOperator env (expr : []) = standardAritmeticOperator (/) (Number 1) env [expr]
+divisionOperator env (expr : exprs) = standardAritmeticOperator (/) expr env exprs
 
+-- Checks that operator holds true between each adjacent pair
 comparisonOperator :: (Float -> Float -> Bool) -> Env -> [Expr] -> ExprResult
-comparisonOperator op env exprs = do
+comparisonOperator operator env exprs = do
   evalExprs <- mapM (eval env) exprs
   comparisons <- zipWithM oper evalExprs (drop 1 evalExprs)
   case all (== Boolean True) (map fst comparisons) of
@@ -138,9 +148,10 @@ comparisonOperator op env exprs = do
     False -> Right $ (Boolean False, env)
   where
     oper :: (Expr, Env) -> (Expr, Env) -> ExprResult
-    oper (Number x, env1) (Number y, env2) = Right (Boolean $ op x y, Map.union env1 env2)
+    oper (Number x, env1) (Number y, env2) = Right (Boolean $ operator x y, Map.union env1 env2)
     oper _ _ = Left NotANumber
 
+-- True => use first expr, False => use second expr
 ifOperator :: Env -> [Expr] -> ExprResult
 ifOperator env (x : y : z : []) = do
   (evalX, envX) <- eval env x
@@ -153,12 +164,15 @@ ifOperator env (x : y : z : []) = do
     _ -> Left InvalidForm
 ifOperator _ _ = Left InvalidForm
 
+-- returns new env with new symbol added
 defOperator :: Env -> [Expr] -> ExprResult
 defOperator env (Symbol s : x : []) = do
   (evalX, newEnv) <- eval env x
   Right (evalX, Map.insert s evalX newEnv)
 defOperator _ _ = Left InvalidForm
 
+-- lambda is called by passing exprs after lambda
+-- ((lambda (a b) (+ a b)) 2 3) => 5
 lambdaOperator :: Env -> [Expr] -> ExprResult
 lambdaOperator env (x : y : []) = Right (Lambda x y, env)
 lambdaOperator _ _ = Left InvalidForm
@@ -187,6 +201,7 @@ eval env (List (x : xs)) = case eval env x of
   _ -> Left InvalidForm
 eval _ (Lambda _ _) = Left UnexpectedFunction
 
+-- Simplifies user interface into one function call
 parseAndEval :: Env -> String -> Either ReplError (Expr, Env)
 parseAndEval env input =
   case parse . tokenize $ input of

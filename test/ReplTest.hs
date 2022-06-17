@@ -33,7 +33,7 @@ parseTests =
       checkEqual ")" $ Left $ ParseError InvalidRightParens,
       checkEqual "(+ 2 3" $ Left $ ParseError MissingRightParens,
       checkEqual "(+ 2 3) 4" $ Left $ ParseError TokensRemaining,
-      checkEqual "(+ 2 (- 3 (* 4 (/ 5 6))))" $ Right (Number $ 1 + 2/3, defaultEnv)
+      checkEqual "(+ 2 (- 3 (* 4 (/ 5 6))))" $ Right (Number $ 1 + 2 / 3, defaultEnv)
     ]
 
 additionTests :: TestTree
