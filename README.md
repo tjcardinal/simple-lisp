@@ -1,4 +1,4 @@
-# lisp-hs
-A simple Lisp interpreter written in Haskell
+# lisp
+A simple Lisp interpreter
 
-Built in functions: +, -, /, *, >, >=, <, <=, =, if, def, lambda
+Built in functions: +, -, /, *, >, >=, <, <=, =, if, def, lambda, quote
